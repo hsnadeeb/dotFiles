@@ -49,4 +49,12 @@ if [ -d "$ROOT/config/.config" ]; then
   done < <(find "$ROOT/config/.config" -mindepth 1 -maxdepth 1 -print0)
 fi
 
+# Ghostty on macOS reads from ~/Library/Application Support/com.mitchellh.ghostty/config.
+# Keep it in sync with ~/.config/ghostty/config when present in this repo.
+if [ -f "$ROOT/config/.config/ghostty/config" ]; then
+  link_item \
+    "$ROOT/config/.config/ghostty/config" \
+    "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
+fi
+
 echo "done. backups in: $BACKUP_DIR"
