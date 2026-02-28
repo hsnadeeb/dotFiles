@@ -1,0 +1,78 @@
+Core Features
+Enhanced LSP Support
+Improved code navigation with gd (go to definition)
+Added gr for find references
+Included <leader>ln for rename functionality
+Better hover documentation and code actions
+Trouble.nvim Integration
+Toggleable diagnostics window with <leader>xx
+Filter by error severity (errors, warnings, etc.)
+Quick access to LSP references and definitions
+Git Integration (Gitsigns)
+Inline git blame
+Stage/reset hunks
+Preview changes
+Navigate between changes
+Debugging (nvim-dap)
+Toggle breakpoints
+Step through code
+Variable inspection
+Debug console
+UI Improvements
+Themes
+Multiple theme support with easy switching
+Default decay theme with alternatives (everforest, tokyonight, kanagawa, catppuccin, onedark)
+Status Line
+Custom lualine configuration
+Git integration
+LSP status
+File Explorer
+nvim-tree with icons
+File operations
+Keybindings
+Window Management
+<C-h/j/k/l> for window navigation
+<C-arrow> for window resizing
+Tab navigation with gt/gT
+Commenting
+<leader>cc - Toggle line comment
+<leader>cb - Toggle block comment
+Visual mode support
+Terminal
+<C-\> - Toggle terminal
+<leader>tf - Floating terminal
+<leader>th - Horizontal split terminal
+<leader>tv - Vertical split terminal
+Search & Navigation
+<leader>ff - Find files
+<leader>fg - Live grep
+<leader>fb - Find buffer
+Quality of Life
+Auto Pairs
+Automatic bracket/paren completion
+Smart handling of quotes
+Indent Guides
+Visual indentation guides
+Context-aware highlighting
+Session Management
+Auto-save/restore sessions
+Project-specific sessions
+Todo Comments
+Highlight and list TODO/FIXME comments
+Quick navigation between todos
+Debugging & Diagnostics
+Trouble.nvim
+Organized view of diagnostics
+Quick navigation to issues
+LSP Saga
+Enhanced LSP UI
+Code action lightbulbs
+Hover documentation
+DAP Integration
+Debug adapter protocol support
+Breakpoints and stepping
+Variable inspection
+Custom Keybindings
+<leader> space as the main prefix
+Logical grouping of related commands
+Discoverable with which-key
