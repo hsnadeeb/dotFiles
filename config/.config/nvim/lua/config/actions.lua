@@ -36,28 +36,6 @@ function M.register_user_commands()
   })
 end
 
--- Install buffer-local LSP convenience keymaps on attach.
-function M.setup_lsp_attach_keymaps()
-  local utils = require("config.utils")
-  local group = vim.api.nvim_create_augroup("ConfigLspAttachKeymaps", { clear = true })
-
-  vim.api.nvim_create_autocmd("LspAttach", {
-    group = group,
-    callback = function(args)
-      local bufnr = args.buf
-      local function buf_map(lhs, rhs, desc)
-        utils.buf_map(bufnr, "n", lhs, rhs, { desc = desc })
-      end
-
-      buf_map("gs", vim.lsp.buf.document_symbol, "Document symbols")
-      buf_map("gS", vim.lsp.buf.workspace_symbol, "Workspace symbols")
-      buf_map("<leader>bb", vim.lsp.buf.definition, "Go to definition")
-      buf_map("<leader>bi", vim.lsp.buf.implementation, "Go to implementation")
-      buf_map("<leader>br", vim.lsp.buf.references, "Find usages")
-    end,
-  })
-end
-
 -- Build a lazy-safe Telescope action by picker name.
 function M.telescope_call(fn_name, opts)
   return function()

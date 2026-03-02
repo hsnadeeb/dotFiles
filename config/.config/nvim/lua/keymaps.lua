@@ -7,7 +7,6 @@ local actions = require("config.actions")
 local map = utils.map
 
 actions.register_user_commands()
-actions.setup_lsp_attach_keymaps()
 
 -- Window navigation
 map("n", "<C-h>", "<C-w>h", { desc = "Left window" })

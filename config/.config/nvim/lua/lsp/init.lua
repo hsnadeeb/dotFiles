@@ -14,22 +14,33 @@ local function on_attach(client, bufnr)
     client.server_capabilities.documentFormattingProvider = false
   end
 
-  map("n", "gD", vim.lsp.buf.declaration, opts)
-  map("n", "gd", vim.lsp.buf.definition, opts)
-  map("n", "gi", vim.lsp.buf.implementation, opts)
-  map("n", "gr", vim.lsp.buf.references, opts)
-  map("n", "gt", vim.lsp.buf.type_definition, opts)
-  map("n", "K", vim.lsp.buf.hover, opts)
-  map("n", "<C-k>", vim.lsp.buf.signature_help, opts)
-  map("n", "<leader>rn", vim.lsp.buf.rename, opts)
-  map("n", "<leader>ca", vim.lsp.buf.code_action, opts)
-
-  map("n", "[d", function()
-    vim.diagnostic.jump({ count = -1 })
-  end, opts)
-  map("n", "]d", function()
+  -- Keep LSP mappings under <leader>l to avoid clashes with normal motion keys.
+  map("n", "<leader>la", vim.lsp.buf.code_action, vim.tbl_extend("force", opts, { desc = "LSP: Code Action" }))
+  map("n", "<leader>ld", vim.diagnostic.open_float, vim.tbl_extend("force", opts, { desc = "LSP: Diagnostics" }))
+  map("n", "<leader>lD", vim.lsp.buf.declaration, vim.tbl_extend("force", opts, { desc = "LSP: Declaration" }))
+  map("n", "<leader>ll", vim.lsp.buf.definition, vim.tbl_extend("force", opts, { desc = "LSP: Definition" }))
+  map("n", "<leader>li", vim.lsp.buf.implementation, vim.tbl_extend("force", opts, { desc = "LSP: Implementation" }))
+  map("n", "<leader>lr", vim.lsp.buf.references, vim.tbl_extend("force", opts, { desc = "LSP: References" }))
+  map("n", "<leader>lt", vim.lsp.buf.type_definition, vim.tbl_extend("force", opts, { desc = "LSP: Type Definition" }))
+  map("n", "<leader>lf", function()
+    local ok_conform, conform = pcall(require, "conform")
+    if ok_conform then
+      conform.format()
+      return
+    end
+    vim.lsp.buf.format()
+  end, vim.tbl_extend("force", opts, { desc = "LSP: Format" }))
+  map("n", "<leader>lh", vim.lsp.buf.hover, vim.tbl_extend("force", opts, { desc = "LSP: Hover" }))
+  map("n", "<leader>lk", vim.lsp.buf.signature_help, vim.tbl_extend("force", opts, { desc = "LSP: Signature Help" }))
+  map("n", "<leader>ln", vim.lsp.buf.rename, vim.tbl_extend("force", opts, { desc = "LSP: Rename" }))
+  map("n", "<leader>ls", vim.lsp.buf.document_symbol, vim.tbl_extend("force", opts, { desc = "LSP: Document Symbols" }))
+  map("n", "<leader>lS", vim.lsp.buf.workspace_symbol, vim.tbl_extend("force", opts, { desc = "LSP: Workspace Symbols" }))
+  map("n", "<leader>lj", function()
     vim.diagnostic.jump({ count = 1 })
-  end, opts)
+  end, vim.tbl_extend("force", opts, { desc = "LSP: Next Diagnostic" }))
+  map("n", "<leader>lp", function()
+    vim.diagnostic.jump({ count = -1 })
+  end, vim.tbl_extend("force", opts, { desc = "LSP: Previous Diagnostic" }))
 
   if client.server_capabilities.documentHighlightProvider then
     local group = vim.api.nvim_create_augroup("LspDocumentHighlight" .. bufnr, { clear = true })
