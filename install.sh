@@ -33,27 +33,27 @@ link_item() {
   echo "link: $dst -> $src"
 }
 
-# Manage top-level dotfiles from ./home
+# Manage top-level dotfiles from ./home (except .config subtree)
 if [ -d "$ROOT/home" ]; then
   while IFS= read -r -d '' src; do
     rel="${src#$ROOT/home/}"
     link_item "$src" "$HOME/$rel"
-  done < <(find "$ROOT/home" -mindepth 1 -maxdepth 1 -print0)
+  done < <(find "$ROOT/home" -mindepth 1 -maxdepth 1 ! -name '.config' -print0)
 fi
 
-# Manage ~/.config entries from ./config/.config
-if [ -d "$ROOT/config/.config" ]; then
+# Manage ~/.config entries from ./home/.config
+if [ -d "$ROOT/home/.config" ]; then
   while IFS= read -r -d '' src; do
-    rel="${src#$ROOT/config/.config/}"
+    rel="${src#$ROOT/home/.config/}"
     link_item "$src" "$HOME/.config/$rel"
-  done < <(find "$ROOT/config/.config" -mindepth 1 -maxdepth 1 -print0)
+  done < <(find "$ROOT/home/.config" -mindepth 1 -maxdepth 1 -print0)
 fi
 
 # Ghostty on macOS reads from ~/Library/Application Support/com.mitchellh.ghostty/config.
 # Keep it in sync with ~/.config/ghostty/config when present in this repo.
-if [ -f "$ROOT/config/.config/ghostty/config" ]; then
+if [ -f "$ROOT/home/.config/ghostty/config" ]; then
   link_item \
-    "$ROOT/config/.config/ghostty/config" \
+    "$ROOT/home/.config/ghostty/config" \
     "$HOME/Library/Application Support/com.mitchellh.ghostty/config"
 fi
 

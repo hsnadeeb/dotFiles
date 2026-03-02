@@ -26,7 +26,7 @@ for input in "$@"; do
   rel="${input#$HOME/}"
 
   if [[ "$rel" == .config/* ]]; then
-    target="$ROOT/config/$rel"
+    target="$ROOT/home/$rel"
   else
     target="$ROOT/home/$rel"
   fi
