@@ -452,7 +452,7 @@ if [[ "$OSTYPE" == darwin* ]]; then
   alias capiwc='screencapture -i -w -c'
 
   # … and functions for timestamped file saves.
-  readonly CAPTURE_FOLDER="$HOME/Desktop"
+  [[ -z "${CAPTURE_FOLDER+x}" ]] && readonly CAPTURE_FOLDER="$HOME/Desktop"
   cap()   { screencapture        "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
   capi()  { screencapture -i     "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
   capiw() { screencapture -i -w  "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
