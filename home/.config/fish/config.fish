@@ -11,7 +11,24 @@ function __zrc_path_prepend --argument dir
     end
 end
 
+function __zrc_normalize_path
+    # Recover from malformed startup environments that pass PATH as one string.
+    if test (count $PATH) -eq 1; and string match -q '*:*' -- "$PATH[1]"
+        set -gx PATH (string split : -- "$PATH[1]")
+    end
+
+    # Keep only real directories and remove duplicates while preserving order.
+    set -l normalized
+    for entry in $PATH
+        if test -n "$entry"; and test -d "$entry"; and not contains -- "$entry" $normalized
+            set normalized $normalized "$entry"
+        end
+    end
+    set -gx PATH $normalized
+end
+
 set -gx HISTFILE "$HOME/.zsh_history"
+__zrc_normalize_path
 
 __zrc_path_prepend "/Applications/IntelliJ IDEA.app/Contents/MacOS"
 __zrc_path_prepend "/opt/homebrew/bin"
@@ -50,60 +67,60 @@ bind \e\[B history-prefix-search-forward
 # 03) Prompt (git branch + dirty marker + exit code + extra spacing)
 # -----------------------------------------------------------------------------
 
-function __zrc_git_info
-    command -sq git; or return
-    git rev-parse --is-inside-work-tree >/dev/null 2>&1; or return
+# function __zrc_git_info
+#     command -sq git; or return
+#     git rev-parse --is-inside-work-tree >/dev/null 2>&1; or return
 
-    set -l branch (git symbolic-ref --quiet --short HEAD 2>/dev/null)
-    if test -z "$branch"
-        set branch (git rev-parse --short HEAD 2>/dev/null)
-    end
-    test -z "$branch"; and return
+#     set -l branch (git symbolic-ref --quiet --short HEAD 2>/dev/null)
+#     if test -z "$branch"
+#         set branch (git rev-parse --short HEAD 2>/dev/null)
+#     end
+#     test -z "$branch"; and return
 
-    set -l dirty ""
-    if test -n "$(git status --porcelain -uno 2>/dev/null)"
-        set dirty " "(set_color brred)"✚"(set_color normal)
-    end
+#     set -l dirty ""
+#     if test -n "$(git status --porcelain -uno 2>/dev/null)"
+#         set dirty " "(set_color brred)"✚"(set_color normal)
+#     end
 
-    echo -n " "(set_color brblack)"on"(set_color normal)" "(set_color green)$branch(set_color normal)$dirty
-end
+#     echo -n " "(set_color brblack)"on"(set_color normal)" "(set_color green)$branch(set_color normal)$dirty
+# end
 
-function fish_prompt
-    set -l last_status $status
+# function fish_prompt
+#     set -l last_status $status
 
-    echo
+#     echo
 
-    if test $last_status -eq 0
-        set_color green
-    else
-        set_color red
-    end
-    echo -n $USER
-    set_color normal
+#     if test $last_status -eq 0
+#         set_color green
+#     else
+#         set_color red
+#     end
+#     echo -n $USER
+#     set_color normal
 
-    echo -n " "
-    set_color brblack
-    echo -n "in"
-    set_color normal
-    echo -n " "
-    set_color brcyan
-    echo -n (prompt_pwd)
-    set_color normal
+#     echo -n " "
+#     set_color brblack
+#     echo -n "in"
+#     set_color normal
+#     echo -n " "
+#     set_color brcyan
+#     echo -n (prompt_pwd)
+#     set_color normal
 
-    echo -n (__zrc_git_info)
+#     echo -n (__zrc_git_info)
 
-    if test $last_status -ne 0
-        echo -n " "
-        set_color red
-        echo -n "✘ $last_status"
-        set_color normal
-    end
+#     if test $last_status -ne 0
+#         echo -n " "
+#         set_color red
+#         echo -n "✘ $last_status"
+#         set_color normal
+#     end
 
-    echo
-    set_color red
-    echo -n "❯ "
-    set_color normal
-end
+#     echo
+#     set_color red
+#     echo -n "❯ "
+#     set_color normal
+# end
 
 # -----------------------------------------------------------------------------
 # 04) Mise lazy init
@@ -168,7 +185,11 @@ alias sc='shellcheck --exclude=2001,2148'
 alias grep='grep --color=auto'
 
 function path
-    string split : $PATH
+    if test (count $argv) -eq 0
+        string split : $PATH
+    else
+        builtin path $argv
+    end
 end
 
 function please
