@@ -136,8 +136,6 @@ mise() { _zrc_mise_once; command mise "$@"; }
 # ==============================================================================
 # 07) NVM / NODE TOOLS (lazy — stub functions replaced on first use)
 # ==============================================================================
-# BUG FIX: the original used `command nvm` after sourcing nvm.sh, but nvm is a
-# *shell function*, so `command` bypasses it. We use plain function lookup here.
 typeset -gi _ZRC_NVM_DONE=0
 _zrc_nvm_once() {
   (( _ZRC_NVM_DONE )) && return
@@ -247,9 +245,6 @@ mine() { ps "$@" -u "${USER}" -o pid,%cpu,%mem,start,time,bsdtime,command; }
 # ==============================================================================
 # 10) ALIASES — DOCKER / INFRA
 # ==============================================================================
-# BUG FIX: the original aliases ran `cd` in the current shell, silently leaving
-# you inside ~/docker/mysql after infra-up. Wrapping each in a subshell ( ... )
-# keeps your working directory intact.
 alias dk='docker compose'
 alias kafka-up='( cd ~/docker/kafka && dk up -d )'
 alias kafka-down='( cd ~/docker/kafka && dk down )'
