@@ -1,0 +1,346 @@
+# # --- ZCOMPILE LOADER (SYMLINK-SAFE) ---
+# local _zrc_real="${ZSHRC_REAL_PATH:-$HOME/.zshrc}"
+# if [[ -z "$_ZRC_COMPILED" && -f "${_zrc_real}.zwc" && "${_zrc_real}.zwc" -nt "$_zrc_real" ]]; then
+#   _ZRC_COMPILED=1
+#   source "${_zrc_real}.zwc"
+#   return
+# fi
+# unset _zrc_real
+# # --- ZCOMPILE LOADER (END) ---
+# zshcomp() {
+#   local real_path="$(readlink -f ~/.zshrc 2>/dev/null || echo ~/.zshrc)"
+#   zcompile -U -M "$real_path"
+#   echo "✅ Compiled: ${real_path}.zwc"
+# }
+# ------------------------------------------------------------------------------
+# 00) EARLY EXIT FOR NON-INTERACTIVE SHELLS (after essential setup)
+# ------------------------------------------------------------------------------
+typeset -gU path PATH  # Dedupe PATH globally
+[[ $- != *i* ]] && return  # Exit early for scripts/non-interactive
+
+# ------------------------------------------------------------------------------
+# 01) PATH MANAGEMENT (minimal, sync)
+# ------------------------------------------------------------------------------
+_zrc_prepend() { [[ -d "$1" ]] && path=("$1" $path); }
+
+# Core paths (exist-check inline to avoid function call overhead)
+for dir in /opt/homebrew/bin /usr/local/bin "$HOME/.local/bin" "$HOME/go/bin"; do
+  _zrc_prepend "$dir"
+done
+
+# Optional app paths
+[[ -d "/Applications/IntelliJ IDEA.app/Contents/MacOS" ]] && \
+  _zrc_prepend "/Applications/IntelliJ IDEA.app/Contents/MacOS"
+[[ -n "$JAVA_HOME" && -d "$JAVA_HOME/bin" ]] && _zrc_prepend "$JAVA_HOME/bin"
+
+# Android SDK (only if configured)
+if [[ -n "$ANDROID_HOME" ]]; then
+  for dir in platform-tools emulator tools/bin tools; do
+    _zrc_prepend "$ANDROID_HOME/$dir"
+  done
+fi
+unfunction _zrc_prepend  # Free memory
+
+# ------------------------------------------------------------------------------
+# 02) HISTORY (lightweight)
+# ------------------------------------------------------------------------------
+export HISTFILE="$HOME/.zsh_history"
+HISTSIZE=50000 SAVEHIST=50000
+setopt APPEND_HISTORY SHARE_HISTORY HIST_IGNORE_ALL_DUPS
+setopt HIST_REDUCE_BLANKS HIST_VERIFY HIST_FIND_NO_DUPS
+bindkey '^[[A' history-beginning-search-backward
+bindkey '^[[B' history-beginning-search-forward
+
+# ------------------------------------------------------------------------------
+# 03) SHELL BEHAVIOR (essential options only)
+# ------------------------------------------------------------------------------
+setopt AUTO_CD AUTO_PUSHD PUSHD_IGNORE_DUPS
+setopt EXTENDED_GLOB NO_CASE_GLOB GLOB_DOTS NO_BEEP INTERACTIVE_COMMENTS
+unsetopt FLOW_CONTROL
+autoload -Uz zmv
+
+# ------------------------------------------------------------------------------
+# 04) COMPLETION (lazy — triggers on first Tab or command)
+# ------------------------------------------------------------------------------
+[[ -d "$HOME/.cache" ]] || mkdir -p "$HOME/.cache"
+zstyle ':completion:*' use-cache on
+zstyle ':completion:*' cache-path "$HOME/.cache/zsh_completion_cache"
+zstyle ':completion:*' matcher-list 'm:{a-zA-Z}={A-Za-z}' 'r:|[._-]=* r:|=*' 'l:|=*'
+zstyle ':completion:*' menu select
+zstyle ':completion:*' accept-exact '*(N)'
+
+autoload -Uz compinit add-zsh-hook
+typeset -gi _ZRC_COMPINIT_DONE=0
+
+_zrc_compinit_once() {
+  (( _ZRC_COMPINIT_DONE )) && return
+  _ZRC_COMPINIT_DONE=1
+  compinit -C -d "$HOME/.cache/zcompdump"
+  bindkey '^I' expand-or-complete
+  bindkey '^[[Z' reverse-menu-complete
+}
+
+# Lazy Tab binding
+_zrc_lazy_tab() { _zrc_compinit_once; zle expand-or-complete; }
+zle -N _zrc_lazy_tab
+bindkey '^I' _zrc_lazy_tab
+
+# Fallback: init before first command if Tab never pressed
+_zrc_compinit_on_first_cmd() {
+  add-zsh-hook -d preexec _zrc_compinit_on_first_cmd
+  _zrc_compinit_once
+}
+add-zsh-hook preexec _zrc_compinit_on_first_cmd
+
+# ------------------------------------------------------------------------------
+# 05) PLUGINS — DEFERRED UNTIL AFTER FIRST PROMPT (major speed win)
+# ------------------------------------------------------------------------------
+typeset -gi _ZRC_PLUGINS_LOADED=0
+_zrc_load_plugins_deferred() {
+  (( _ZRC_PLUGINS_LOADED )) && return
+  _ZRC_PLUGINS_LOADED=1
+  local brew="${HOMEBREW_PREFIX:-/opt/homebrew}"
+  
+  # zsh-autosuggestions (async + minimal config)
+  if [[ -f "$brew/share/zsh-autosuggestions/zsh-autosuggestions.zsh" ]]; then
+    source "$brew/share/zsh-autosuggestions/zsh-autosuggestions.zsh"
+    ZSH_AUTOSUGGEST_STRATEGY=(history)
+    ZSH_AUTOSUGGEST_BUFFER_MAX_SIZE=15
+    ZSH_AUTOSUGGEST_USE_ASYNC=1
+    ZSH_AUTOSUGGEST_HIGHLIGHT_STYLE='fg=#808080,bg=default'
+  fi
+  
+  # fast-syntax-highlighting (async + reduced visual noise)
+  if [[ -f "$brew/share/zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh" ]]; then
+    source "$brew/share/zsh-fast-syntax-highlighting/fast-syntax-highlighting.plugin.zsh"
+    FAST_HIGHLIGHT[use_async]=1
+    unset 'FAST_HIGHLIGHT_STYLES[path]' 'FAST_HIGHLIGHT_STYLES[path_prefix]' 2>/dev/null
+  fi
+}
+add-zsh-hook precmd _zrc_load_plugins_deferred  # Load AFTER first prompt render
+
+# ------------------------------------------------------------------------------
+# 06) MISE (lazy activation on cd or first command)
+# ------------------------------------------------------------------------------
+typeset -gi _ZRC_MISE_DONE=0
+_zrc_mise_once() {
+  (( _ZRC_MISE_DONE )) && return
+  command -v mise &>/dev/null || return
+  _ZRC_MISE_DONE=1
+  eval "$(mise activate zsh)"
+}
+add-zsh-hook chpwd _zrc_mise_once
+add-zsh-hook preexec _zrc_mise_once
+mise() { _zrc_mise_once; command mise "$@"; }
+
+# ------------------------------------------------------------------------------
+# 07) NVM / NODE TOOLS (lazy stubs — zero startup cost)
+# ------------------------------------------------------------------------------
+typeset -gi _ZRC_NVM_DONE=0
+_zrc_nvm_once() {
+  (( _ZRC_NVM_DONE )) && return
+  _ZRC_NVM_DONE=1
+  unfunction nvm node npm npx yarn pnpm 2>/dev/null
+  export NVM_DIR="$HOME/.nvm"
+  [[ -s "$NVM_DIR/nvm.sh" ]] && source "$NVM_DIR/nvm.sh" --no-use
+  [[ -f .nvmrc ]] && nvm use --silent &>/dev/null
+}
+_zrc_nvm_shim() { _zrc_nvm_once; "$@"; }
+for cmd in nvm node npm npx yarn pnpm; do
+  eval "$cmd() { _zrc_nvm_shim $cmd \"\$@\"; }"
+done
+
+# ------------------------------------------------------------------------------
+# 08) FZF WIDGETS (on-demand)
+# ------------------------------------------------------------------------------
+_zrc_fzf_history() {
+  local selected
+  selected="$(builtin fc -rl 1 | fzf --tac --no-sort --exact --height=40% --reverse --border --inline-info)"
+  [[ -z "$selected" ]] && { zle reset-prompt; return; }
+  BUFFER="${${selected##[[:space:]]#<->[[:space:]]#}:-$selected}"
+  CURSOR=${#BUFFER}
+  zle reset-prompt
+}
+zle -N _zrc_fzf_history
+bindkey '^R' _zrc_fzf_history
+
+# ------------------------------------------------------------------------------
+# 09) ALIASES (grouped, minimal, no startup overhead)
+# ------------------------------------------------------------------------------
+# Navigation & UI
+alias ..='cd ..' ...='cd ../..' ....='cd ../../..' c='clear'
+alias l='ls -lFh' la='ls -lAFh' ll='ls -l'
+
+# Safer coreutils
+alias cp='cp -iv' mv='mv -iv' mkdir='mkdir -pv' rm='rm -i' rmd='rm -rf'
+alias ax='chmod a+x' make-exe='chmod 700' symlink='ln -s'
+
+# Utilities
+alias path='echo ${(j:\n:)path}' please='sudo !!' grep='grep --color=auto'
+alias aliases="alias | sed 's/=.*//'" functions="declare -f | grep '^[a-z].* ()' | sed 's/ {$//'"
+
+# Dev tools
+alias shfmt='shfmt -ci -bn -i 2' sc='shellcheck --exclude=2001,2148'
+alias ip='curl -s ifconfig.me' ip-wifi='ipconfig getifaddr en0' ip-wired='ipconfig getifaddr en1'
+
+# Git
+alias gs='git status' gst='git stash' gsp='git stash pop' ga='git add'
+alias gc='git commit' gco='git checkout' gf='git fetch' gp='git push'
+alias gl='git pull --rebase' gd='git diff' lg='lazygit'
+
+# Projects (customize paths as needed)
+alias projects='cd ~/Projects && la' nvconf='cd ~/.config/nvim'
+alias wello='cd ~/Projects/Wello && la' shaz='cd ~/Projects/Shaz && la'
+alias notes='cd ~/Projects/Learning/VSCodeNotes && nvim .'
+alias be='cd ~/Projects/Wello/vital-ecare-backend && npm run dev'
+alias fe='cd ~/Projects/Wello/vital-ecare-frontend && npm start'
+alias x3rph='cd ~/oracle/X3rph && ssh -i x3rph.key ubuntu@161.118.167.226'
+alias doom='cd ~/Projects/Games/terminal-doom && ./zig-out/bin/terminal-doom'
+
+# Monitoring
+alias memHogs='ps wwaxm -o pid,stat,vsize,rss,time,command | head -10'
+alias cpuHogs='ps wwaxr -o pid,stat,%cpu,time,command | head -10'
+mine() { ps "$@" -u "${USER}" -o pid,%cpu,%mem,start,time,bsdtime,command; }
+
+# Config
+alias zshrc='nvim ~/.zshrc'
+
+# ------------------------------------------------------------------------------
+# 10) DOCKER / INFRA (concise, generated)
+# ------------------------------------------------------------------------------
+alias dk='docker compose'
+for svc in kafka redis pg mysql; do
+  alias ${svc}-up="( cd ~/docker/$svc && dk up -d )"
+  alias ${svc}-down="( cd ~/docker/$svc && dk down )"
+done
+alias infra-up='kafka-up && redis-up && pg-up && mysql-up'
+alias infra-down='kafka-down && redis-down && pg-down && mysql-down'
+alias kafka-logs='docker logs -f kafka'
+alias kafka-ui-logs='docker logs -f kafka-ui'
+
+# ------------------------------------------------------------------------------
+# 11) UTILITY FUNCTIONS (zero startup cost — defined but not called)
+# ------------------------------------------------------------------------------
+mkcd() { [[ -n "$1" ]] && mkdir -p "$1" && cd "$1"; }
+
+killproc() {
+  [[ -z "$1" ]] && { echo 'Usage: killproc <pattern>'; return 1; }
+  echo "Processes matching '$1':"
+  pgrep -af -- "$1" 2>/dev/null || { echo ' (none found)'; return 1; }
+  printf 'Kill all? [y/N] '
+  read -r answer
+  [[ "$answer" =~ ^[Yy]$ ]] && pkill -f -- "$1" && echo 'Killed.'
+}
+
+extract() {
+  local f="$1"
+  [[ -f "$f" ]] || { echo "File not found: $f"; return 1; }
+  case "$f" in
+    *.tar.bz2|*.tbz2) tar xjf "$f" ;;
+    *.tar.gz|*.tgz)   tar xzf "$f" ;;
+    *.bz2)            bunzip2 "$f" ;;
+    *.gz)             gunzip "$f" ;;
+    *.tar)            tar xf "$f" ;;
+    *.zip)            unzip "$f" ;;
+    *.Z)              uncompress "$f" ;;
+    *.7z)             7z x "$f" ;;
+    *) echo "Cannot extract '$f'"; return 1 ;;
+  esac
+}
+
+dirinfo() {
+  local d="${1:-.}"
+  [[ -d "$d" ]] || { echo "Not a directory: $d"; return 1; }
+  echo "Directory : $d"
+  echo "Size      : $(du -sh "$d" | cut -f1)"
+  echo "Files     : $(find "$d" -type f | wc -l | tr -d ' ')"
+  echo "Dirs      : $(find "$d" -type d | wc -l | tr -d ' ')"
+}
+
+colors() {
+  for i in {0..255}; do
+    print -Pn "%K{$i} %k%F{$i}${(l:3::0:)i}%f "
+    (( i % 6 == 3 )) && print
+  done
+}
+
+# ------------------------------------------------------------------------------
+# 12) MACOS-SPECIFIC (conditional, minimal, fixed)
+# ------------------------------------------------------------------------------
+if [[ "$OSTYPE" == darwin* ]]; then
+  # Clipboard utilities
+  alias cpwd='pwd | tr -d "\n" | pbcopy'
+  alias cl='fc -e - | pbcopy'
+  alias caff='caffeinate -ism'
+  
+  # Screenshots — clipboard variants
+  alias capc='screencapture -c'
+  alias capic='screencapture -i -c'
+  alias capiwc='screencapture -i -w -c'
+  
+  # Screenshots — file saves with timestamp (explicit functions, no loops)
+  : "${CAPTURE_FOLDER:=$HOME/Desktop}"  # Safe default, respects existing readonly
+  cap()   { screencapture "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
+  capi()  { screencapture -i "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
+  capiw() { screencapture -i -w "$CAPTURE_FOLDER/capture-$(date +%Y%m%d_%H%M%S).png"; }
+  
+  # Finder helpers
+  alias cleanDS='find . -type f -name "*.DS_Store" -ls -delete'
+  alias showHidden='defaults write com.apple.finder AppleShowAllFiles TRUE'
+  alias hideHidden='defaults write com.apple.finder AppleShowAllFiles FALSE'
+  alias cleanupLS='/System/Library/Frameworks/CoreServices.framework/Frameworks/LaunchServices.framework/Support/lsregister -kill -r -domain local -domain system -domain user && killall Finder'
+  
+  f() { open -a 'Finder' "${1:-.}"; }
+  ql() { qlmanage -p "$@" &>/dev/null; }
+  
+  # Remove quarantine attributes from downloaded files (fixed attribute names)
+  unquarantine() {
+    local file
+    for file in "$@"; do
+      xattr -r -d com.apple.quarantine "$file" 2>/dev/null
+      xattr -r -d com.apple.metadata:kMDItemWhereFroms "$file" 2>/dev/null
+      xattr -r -d com.apple.metadata:kMDItemDownloadedDate "$file" 2>/dev/null
+    done
+  }
+  
+  # Spotlight controls
+  alias spot-off='sudo launchctl unload -w /System/Library/LaunchDaemons/com.apple.metadata.mds.plist'
+  alias spot-on='sudo launchctl load -w /System/Library/LaunchDaemons/com.apple.metadata.mds.plist'
+  alias spot-file="lsof -c '/mds$'"
+  spotlight() { [[ -n "$1" ]] && mdfind "kMDItemDisplayName == '$1'"; }
+fi
+# ------------------------------------------------------------------------------
+# 13) POWERLEVEL10K (optimized loading)
+# ------------------------------------------------------------------------------
+# Instant prompt (must load early, after essential vars)
+if [[ -r "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh" ]]; then
+  source "${XDG_CACHE_HOME:-$HOME/.cache}/p10k-instant-prompt-${(%):-%n}.zsh"
+fi
+
+# Load theme only if present
+if [[ -f ~/powerlevel10k/powerlevel10k.zsh-theme ]]; then
+  # Optional speed tweaks (uncomment if you don't need these features):
+  # POWERLEVEL9K_DISABLE_GITSTATUS=true          # Skip git status in prompt
+  # POWERLEVEL9K_MODE='compatible'               # Simpler glyphs = faster render
+  source ~/powerlevel10k/powerlevel10k.zsh-theme
+  [[ ! -f ~/.p10k.zsh ]] || source ~/.p10k.zsh
+fi
+
+# ------------------------------------------------------------------------------
+# 14) PROFILING & FURTHER OPTIMIZATION (commented helpers)
+# ------------------------------------------------------------------------------
+# 🔍 Profile startup time:
+#   hyperfine 'zsh -i -c exit'
+#   zsh -i -c 'zmodload zsh/datetime; print $EPOCHREALTIME'  # Raw timestamp
+#
+# 📊 Detailed profiling (add to TOP of file, remove after):
+#   zmodload zsh/datetime zsh/prof
+#   zprof  # Then run `zprof` at shell prompt to see bottlenecks
+#
+# 🗜️ Advanced: Compile .zshrc for faster parsing (one-time):
+#   zcompile ~/.zshrc
+#   # Then add to TOP of file: [[ ~/.zshrc.zwc -nt ~/.zshrc ]] && source ~/.zshrc.zwc || source ~/.zshrc
+#
+# 🚀 Next-level: Use zsh-defer plugin for cleaner async loading:
+#   git clone https://github.com/romkatv/zsh-defer ~/.zsh/zsh-defer
+#   Then wrap heavy sources: zsh-defer source 'plugin.zsh'
